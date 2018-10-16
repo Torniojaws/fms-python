@@ -12,8 +12,8 @@ Endpoints for fms
 ## Running the project
 
 1. Run ``make run``
-1. In a second console, do eg. ``curl localhost:5000/bookings/123`` or
-  ``curl localhost:5000/bookings?uid=456``
+1. In a second console, do eg. ``curl localhost:5000/bookings/ABCXYZ`` or
+  ``curl localhost:5000/bookings?uid=123``
 
 ## Tests
 

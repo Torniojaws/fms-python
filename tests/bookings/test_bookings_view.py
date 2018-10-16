@@ -10,6 +10,7 @@ class TestBookingsView(unittest.TestCase):
     def setUp(self):
         """Add some example entries to DB."""
         self.app = app.test_client()
+        self.maxDiff = None
 
         flight1 = Flights(
             flight_number='AY131',
@@ -30,25 +31,25 @@ class TestBookingsView(unittest.TestCase):
         db.session.commit()
 
         booking1 = Bookings(
-            id='123',
+            booking_id='ABCXYZ',
             flight_number='AY131',
-            passenger_id='4321',
+            passenger_id=4321,
             first_name='Test1',
             last_name='Test1nen',
             email='test1@example.com',
         )
         booking2 = Bookings(
-            id='124',
+            booking_id='ABCXYZ',
             flight_number='AY5003',
-            passenger_id='4321',
+            passenger_id=4321,
             first_name='Test1',
             last_name='Test1nen',
             email='test1@example.com',
         )
         booking3 = Bookings(
-            id='444',
+            booking_id='YYYZZZ',
             flight_number='AY5003',
-            passenger_id='2323',
+            passenger_id=2323,
             first_name='Test2',
             last_name='Test2nen',
             email='test2@example.com',
@@ -67,12 +68,50 @@ class TestBookingsView(unittest.TestCase):
         db.session.commit()
 
     def test_getting_a_booking_by_uid(self):
-        """Eg. GET /bookings?uid=123"""
-        response = self.app.get('/bookings?uid=123')
+        """Eg. GET /bookings?uid=4321"""
+        # NB: this endpoint checks for bookings.passenger_id, not bookings.id
+        response = self.app.get('/bookings?uid=4321')
+        booking = json.loads(response.get_data().decode())
+        expected_booking_id = Bookings.query.filter_by(passenger_id=4321).first().booking_id
+        self.assertEquals(200, response.status_code)
+        self.assertEquals(booking, {
+            'bookingId': expected_booking_id,
+            'lastName': 'Test1nen',
+            'departure': 'HEL',
+        })
+
+    def test_getting_a_booking_by_nonexisting_uid(self):
+        """Eg. GET /bookings?uid=1111"""
+        # NB: this endpoint checks for bookings.passenger_id, not bookings.id
+        response = self.app.get('/bookings?uid=1111')
         booking = json.loads(response.get_data().decode())
         self.assertEquals(200, response.status_code)
         self.assertEquals(booking, {
-            'bookingId': 123,
-            'lastName': 'Test1nen',
-            'departure': 'HEL',
+            'success': True,
+            'message': 'No booking was found for passenger ID 1111',
+        })
+
+    def test_getting_a_booking_by_booking_id(self):
+        """Eg. GET /bookings/ABCXYZ"""
+        response = self.app.get('/bookings/ABCXYZ')
+        booking = json.loads(response.get_data().decode())
+        self.assertEquals(200, response.status_code)
+        self.assertEquals(booking, {
+            'id': 'ABCXYZ',
+            'passenger': {
+                'firstName': 'Test1',
+                'lastName': 'Test1nen',
+                'email': 'test1@example.com',
+            },
+            'flights': [{
+                'departure': 'HEL',
+                'arrival': 'SIN',
+                'departureDate': '2018-10-16 23:55:00',
+                'arrivalDate': '2018-10-17 17:15:00',
+            }, {
+                'departure': 'SIN',
+                'arrival': 'SYD',
+                'departureDate': '2018-10-17 19:15:00',
+                'arrivalDate': '2018-10-18 06:15:00',
+            }]
         })
