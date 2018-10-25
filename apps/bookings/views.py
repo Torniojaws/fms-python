@@ -1,6 +1,6 @@
 from flask import jsonify, make_response, request
 from flask_classful import FlaskView
-from sqlalchemy import asc, desc
+from sqlalchemy import asc  # , desc
 
 from apps.bookings.models import Bookings
 from apps.flights.models import Flights
@@ -12,48 +12,54 @@ class BookingsView(FlaskView):
     def index(self):
         uid = request.args.get('uid', '')
         with_return_flight = request.args.get('withReturnFlights', 'false')
-
-        check_flight = False
-        if with_return_flight == 'true':
-            # Return only bookings that have a return flight
-            check_flight = True
+        check_flight = with_return_flight == 'true'  # Converts param to matching boolean
 
         # All bookings the passenger has ever done
         bookings = Bookings.query.filter_by(passenger_id=uid).all()
-        print(bookings)
         if not bookings:
             return make_response(jsonify({
                 'success': False,
                 'message': 'No bookings were found for passenger ID {}'.format(uid)
             }), 404)
 
-        flights = []
+        # All flights for the current passenger, oldest first
+        passenger_flight_numbers = [b.flight_number for b in bookings]
+        all_flights = Flights.query.filter(
+            Flights.flight_number.in_(passenger_flight_numbers)
+        ).order_by(
+            asc(Flights.departure_date)
+        ).all()
+
+        result = []
         for booking in bookings:
-            print('It returns {}'.format(Flights.query.filter_by()))
-            booking_flight_number = booking.get('flight_number', '')
-            first_flight = Flights.query.filter_by(flight_number=booking_flight_number).order_by(
-                asc(Flights.departure_date)).first()
+            # Here we rely on the order of flights being in ascending order, so we don't mix up
+            # two different flights with the same number but different departure dates, although
+            # in this case it wouldn't matter as the departure airport is the same anyway.
+            current_flight = [f for f in all_flights if f.flight_number == booking.flight_number]
             flight = {
                 'bookingId': booking.booking_id,
                 'lastName': booking.last_name,
-                'departure': first_flight.departure,
+                'departure': current_flight[0].departure,
             }
             if check_flight:
-                last_flight = Flights.query.filter_by(flight_number=booking.flight_number).order_by(
-                    desc(Flights.departure_date)).first()
-                if first_flight.departure == last_flight.arrival:
-                    flights.append(flight)
-                continue
+                # withReturnFlights=true, ie. checking only for bookings with return flights
+                # Defined as a booking whose first flight departs from the same airport as where
+                # the last flight arrives to.
+                current_bookings = [b for b in bookings if b.booking_id == booking.booking_id]
+
+                first_flight_number = current_bookings[0].flight_number
+                first_flight = [f for f in all_flights if f.flight_number == first_flight_number]
+
+                last_flight_number = current_bookings[-1].flight_number
+                last_flight = [f for f in all_flights if f.flight_number == last_flight_number]
+
+                if first_flight[0].departure == last_flight[0].arrival:
+                    result.append(flight)
+
             else:
-                flights.append(flight)
+                result.append(flight)
 
-        if not first_flight:
-            return make_response(jsonify({
-                'success': True,
-                'message': 'No flight was found for passenger ID {}'.format(uid)
-            }), 200)
-
-        return make_response(jsonify(flights), 200)
+        return make_response(jsonify(result), 200)
 
     # GET /bookings/:id/
     def get(self, booking_id):
